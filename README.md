@@ -1,2 +1,2 @@
-# OpenAPC_expl_2020
+# OpenAPC exploration
 Exploring OpenAPC data and combine with other data, with focus on UGOE
