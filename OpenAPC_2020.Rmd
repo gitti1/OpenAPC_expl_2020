@@ -1,0 +1,250 @@
+---
+title: "OpenAPC_2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, echo = FALSE)
+```
+
+## Exploring OA publishing behavior at UGOE
+Main datasets used: 
+
+* OpenAPC data, https://github.com/OpenAPC/openapc-de
+* Journal lists provided by Directory of Open Access Journals (DOAJ), Scimago (Scirus/Elsevier), Web of Science (WoS)
+
+
+```{r}
+# install themes, if needed 
+# install.packages("hrbrthemes")
+
+# loading was throwing an error, re-install depending libraries before installing hrbrthemes
+# remove.packages(c("ggplot2", "data.table"))
+# install.packages('Rcpp', dependencies = TRUE)
+# install.packages('ggplot2', dependencies = TRUE)
+# install.packages('data.table', dependencies = TRUE)
+
+
+# read libaries
+library(tidyverse)
+library(tidyr)
+library(hrbrthemes)
+library(xtable)
+library(DT)
+library(viridis)
+library(wesanderson)
+
+# palette for plots
+pal1 <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+```
+
+## Spendings on OA publication costs (2012-2018) 
+```{r}
+# read data
+openapc <- read_csv("https://raw.githubusercontent.com/OpenAPC/openapc-de/master/data/apc_de.csv")
+
+# variables
+# names(openapc)
+# [1] "institution"         "period"              "euro"                "doi"              
+# [5] "is_hybrid"           "publisher"           "journal_full_title"  "issn"            
+# [9] "issn_print"          "issn_electronic"     "issn_l"              "license_ref"     
+# [13] "indexed_in_crossref" "pmid"                "pmcid"               "ut"         
+# [17] "url"                 "doaj" 
+
+# all journals
+journals <- select(publisher, journal_full_title,  issn, issn_print, issn_electronic, issn_l,  license_ref, indexed_in_crossref) %>% unique()
+# note that there will still be duplicates as the ISSNs are a bit mixed up
+
+# add variables for indexing by DOAJ, Scimago (Scirus/Elsevier), Web of Science (WoS)
+# Scimago OA Journal Data 2018
+scimagojr_2018_OA <- read_csv2("/Users/bschmidt/ownCloud/data/journals/scimagojr_2018_OA.csv") %>% separate(Issn, c("Issn_1", "Issn_2"), ", ")
+
+journals$Scimago_idx <- ifelse((str_remove(journals$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(journals$issn, "-") %in% scimagojr_2018_OA$Issn_1), TRUE, FALSE)
+
+# read WoS core collections & combine (downloaded on 21 Mar 2020)
+# Science Citation Index Expanded (SCIE), Social Sciences Citation Index (SSCI), Arts & Humanities Citation Index (AHCI), Emerging Sources Citation Index (ESCI)
+wos_scie <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_EX.csv")
+wos_ssci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_SS.csv") 
+wos_ahci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_H.csv")
+wos_esci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_D.csv")
+wos <- bind_rows(list(wos_scie, wos_ssci, wos_ahci, wos_esci)) %>% unique()
+
+#journals_qpub_ugoe$WoS_idx <- ifelse((journals_qpub_ugoe$issn %in% wos$ISSN | journals_qpub_ugoe$issn %in% wos$eISSN | journals_qpub_ugoe$issn_l %in% wos$ISSN | journals_qpub_ugoe$issn_l %in% wos$eISSN), TRUE, FALSE)
+
+journals$Scimago_idx <- ifelse((str_remove(journals$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(journals$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(journals$issn_l, "-") %in% scimagojr_2018_OA$Issn_2 | str_remove(journals$issn_l, "-") %in% scimagojr_2018_OA$Issn_2), TRUE, FALSE)
+
+journals$WoS_idx <- ifelse((journals$issn %in% c(wos$ISSN, wos$eISSN) | journals$issn_l %in% c(wos$ISSN, wos$eISSN)), TRUE, FALSE)
+
+# subset of papers not indexed by WoS or Scimago / Scopus
+pqjs <- journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE)
+length(unique(pqjs$issn_l)) # number of journals
+
+# Indexed by DOAJ
+journals_doaj <- read_csv("/Users/bschmidt/ownCloud/data/journals/journalcsv_doaj_20200321_1635_utf8.csv")
+
+journals$doaj_idx <- ifelse((journals$issn %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`) | journals$issn_l %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`)), TRUE, FALSE)
+
+```
+
+```{r}
+# UGOE subset
+ugoe <- openapc %>% filter(institution == "Goettingen U")
+
+# spending by period
+ugoe %>% group_by(period) %>% 
+  summarize(spend = sum(euro), n = n(), mean = round(mean(euro), 0), median = round(median(euro), 0)) %>%
+  datatable(filter = 'top')
+
+
+# total spending at UGOE
+#ugoe %>% summarize(total_spend = sum(euro), n = n())
+
+total <- sum(ugoe$euro)
+
+# UGOE spendings on APCs over time 
+ugoe %>% group_by(period) %>% summarize(spend = sum(euro), n = n()) %>% ggplot(aes(period, spend)) + geom_bar(stat = "identity", fill = "lightblue") + ggtitle("Publication fund over time (UGOE incl. UMG)")
+
+ugoe %>% ggplot(aes(x = period, y = euro)) + geom_boxplot(aes(group = period)) +
+    ggtitle("Publication fees over time (UGOE incl. UMG)") + theme_light()
+
+# UGOE APCs spendings by publisher & mean, median
+ugoe %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n(), mean = round(mean(euro), 2), median = round(median(euro), 2), perc = round(sum(euro)/total * 100, 2)) %>% arrange(desc(spend)) %>% datatable(filter = 'top')
+
+# all journals - UGOE OA co-funded
+ugoe_journals <- ugoe %>% select(publisher, journal_full_title,  issn, issn_print, issn_electronic, issn_l,  license_ref, indexed_in_crossref) %>% unique()
+
+n_all <- length(unique(ugoe_journals$issn_l))
+
+# spending by journals / publishers
+ugoe_pub <- ugoe %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n()) %>% datatable(filter = 'top')
+```
+
+Overall UGOE spend `r total` Euro on `r nrow(ugoe)` publications over the period 2012-2018.  
+
+## Identifying potentially questionable journals and publishers
+```{r}
+
+# add variables for indexing by DOAJ, Scimago (Scirus/Elsevier), Web of Science (WoS)
+# Scimago OA Journal Data 2018
+scimagojr_2018_OA <- read_csv2("/Users/bschmidt/ownCloud/data/journals/scimagojr_2018_OA.csv") %>% separate(Issn, c("Issn_1", "Issn_2"), ", ")
+
+journals_qpub_ugoe$Scimago_idx <- ifelse((str_remove(journals_qpub_ugoe$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(journals_qpub_ugoe$issn, "-") %in% scimagojr_2018_OA$Issn_1), TRUE, FALSE)
+
+# read WoS core collections & combine (downloaded on 21 Mar 2020)
+# Science Citation Index Expanded (SCIE), Social Sciences Citation Index (SSCI), Arts & Humanities Citation Index (AHCI), Emerging Sources Citation Index (ESCI)
+wos_scie <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_EX.csv")
+wos_ssci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_SS.csv") 
+wos_ahci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_H.csv")
+wos_esci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_D.csv")
+wos <- bind_rows(list(wos_scie, wos_ssci, wos_ahci, wos_esci)) %>% unique()
+
+#journals_qpub_ugoe$WoS_idx <- ifelse((journals_qpub_ugoe$issn %in% wos$ISSN | journals_qpub_ugoe$issn %in% wos$eISSN | journals_qpub_ugoe$issn_l %in% wos$ISSN | journals_qpub_ugoe$issn_l %in% wos$eISSN), TRUE, FALSE)
+
+ugoe_journals$Scimago_idx <- ifelse((str_remove(ugoe_journals$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(ugoe_journals$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(ugoe_journals$issn_l, "-") %in% scimagojr_2018_OA$Issn_2 | str_remove(ugoe_journals$issn_l, "-") %in% scimagojr_2018_OA$Issn_2), TRUE, FALSE)
+
+ugoe_journals$WoS_idx <- ifelse((ugoe_journals$issn %in% c(wos$ISSN, wos$eISSN) | ugoe_journals$issn_l %in% c(wos$ISSN, wos$eISSN)), TRUE, FALSE)
+
+# subset of papers not indexed by WoS or Scimago / Scopus
+pqjs_ugoe <- ugoe_journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE)
+length(unique(pqjs_ugoe$issn_l)) # number of journals
+
+# Indexed by DOAJ
+journals_doaj <- read_csv("/Users/bschmidt/ownCloud/data/journals/journalcsv_doaj_20200321_1635_utf8.csv")
+
+ugoe_journals$doaj_idx <- ifelse((ugoe_journals$issn %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`) | ugoe_journals$issn_l %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`)), TRUE, FALSE)
+
+
+# potentially questionable publishers
+qpub <- c("Academic Journals", "OMICS Publishing Group", "Scientific Research Publishing, Inc.", "SImpact Journals, LLC", "Open Access Text Pvt, Ltd.", "Canadian Center of Science and Education", "Baishideng Publishing Group Inc.", "e-Century Publishing Corporation", "Bentham Science Publishers Ltd.", "Cloud Publications", "Jacobs Publishers", "Boffin Access")
+# Academic Journals: massive list of journals with very small number of papers, questionable author affiliations (e.g. "Department of Fiction, Antioch University" does not seem to exist, https://doi.org/10.5897/IJEL2015.0889), faked paper processing dates (e.g. Received: 12 December 2015; Accepted: 14 June 2019; Published: 30 June 2019)
+# Scientific Research Publishing, Inc. - questionable impact metrics
+# Impact Journals, LLC - was listed as predatory, however, currently indexed by WoS
+# Open Access Text Pvt, Ltd.
+# Canadian Center of Science and Education - questionable impact metrics
+# Baishideng Publishing Group Inc. - unclear
+# e-Century Publishing Corporation - unclear
+# Bentham Science Publishers Ltd. - unclear, was listed as predatory, eg for spamming, see also https://rationalwiki.org/wiki/Bentham_Science_Publishers 
+# Cloud Publications - many nearly empty journals, OJS-based platform
+# Jacobs Publishers - nearly empty journals 
+# European Centre for Research, Training and Development, United Kingdom - unclear
+# Boffin Access - unclear
+
+# unique journals - 33 journals; 29 indexed in CrossRef
+journals_qpub_ugoe <- ugoe_pub_period <- ugoe %>% filter(publisher %in% qpub) %>% select(publisher, journal_full_title,  issn, issn_print, issn_electronic, issn_l,  license_ref, indexed_in_crossref) %>% unique()
+
+n_qpub_ugoe <- length(unique(journals_qpub_ugoe$issn_l))
+
+# total spending and number of papers in potentially questionable journals 2012-2018
+ugoe %>% filter(publisher %in% qpub) %>% summarize(spend = sum(euro), n = n()) 
+
+# list period as well
+ugoe_pub_period <- ugoe %>% filter(publisher %in% qpub) %>% group_by(period, publisher) %>% summarize(spend = sum(euro), n = n()) %>% arrange(period, desc(n)) 
+
+ugoe_pub_period %>% datatable(filter = 'top')
+
+# PQJ papers over time by publisher - UGOE
+ugoe %>% filter(publisher %in% qpub) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    ggtitle("Publications in potentially questionable journals over time (UGOE incl. UMG)") +
+    scale_fill_viridis(discrete = TRUE)
+
+# pubs in list of questionable journals - Germany
+uni_DE <- c("Bamberg U","Duisburg-Essen U","FU Berlin","Konstanz U","Leipzig U", "TU Clausthal","Muenchen LMU","Goettingen U","Heidelberg U","Hamburg TUHH","Bayreuth U","KIT",  "TU Chemnitz","TU Dresden","Dortmund TU","Bochum U","Giessen U","Kassel U", "TU Ilmenau", "TU Muenchen", "Hannover U", "Wuerzburg U", "Potsdam U", "Bremen U","Erlangen Nuernberg U","Tuebingen U", "Ulm U", "Freiburg U", "Oldenburg U", "Regensburg U", "TiHo Hannover", "Münster U","JGU Mainz", "TU Berlin", "Trier U", "Osnabrück U","TU Braunschweig","Stuttgart U","TU Darmstadt", "MLU Halle-Wittenberg",  "Bielefeld U", "Frankfurt U","TH Wildau","Charité - Universitätsmedizin Berlin", "Rostock U", "Marburg U", "Greifswald U", "HU Berlin",  "Mannheim U", "Passau U")  
+
+# research institutions
+rpfo_DE <- c("DLR", "FZJ - ZB", "Fraunhofer-Gesellschaft Publishing Fund", "GEOMAR", "GIGA", "IPN - Leibniz Kiel", "Leibniz-Fonds", "GFZ-Potsdam", "INM - Leibniz-Institut für Neue Materialien", "Leibniz-IGB", "MDC", "MPG","PIK-Potsdam", "TIB", "UFZ", "Weierstrass Institute for Applied Analysis and Stochastics")
+other_DE <- c("Institut für Arbeitsmarkt- und Berufsforschung")
+
+openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub) %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n()) %>% arrange(desc(n)) %>% datatable(filter = 'top')
+
+openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    ggtitle("Publications in potentially questionable journals over time - German universities") 
+
+openapc %>% filter(publisher %in% qpub, period > 2012, period < 2019) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    ggtitle("Publications in potentially questionable journals over time - all institutions (2013-2018)") 
+
+# Scimago OA Journal Data 2018
+scimagojr_2018_OA <- read_csv2("/Users/bschmidt/ownCloud/data/journals/scimagojr_2018_OA.csv") %>% separate(Issn, c("Issn_1", "Issn_2"), ", ")
+
+journals_qpub_ugoe$Scimago_idx <- ifelse((str_remove(journals_qpub_ugoe$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(journals_qpub_ugoe$issn, "-") %in% scimagojr_2018_OA$Issn_1), TRUE, FALSE)
+
+journals_qpub_ugoe %>% datatable(filter = 'top')
+
+# read WoS core collections & combine (downloaded on 21 Mar 2020)
+# Science Citation Index Expanded (SCIE), Social Sciences Citation Index (SSCI), Arts & Humanities Citation Index (AHCI), Emerging Sources Citation Index (ESCI)
+wos_scie <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_EX.csv")
+wos_ssci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_SS.csv") 
+wos_ahci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_H.csv")
+wos_esci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_D.csv")
+wos <- bind_rows(list(wos_scie, wos_ssci, wos_ahci, wos_esci)) %>% unique()
+
+#journals_qpub_ugoe$WoS_idx <- ifelse((journals_qpub_ugoe$issn %in% wos$ISSN | journals_qpub_ugoe$issn %in% wos$eISSN | journals_qpub_ugoe$issn_l %in% wos$ISSN | journals_qpub_ugoe$issn_l %in% wos$eISSN), TRUE, FALSE)
+
+ugoe_journals$Scimago_idx <- ifelse((str_remove(ugoe_journals$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(ugoe_journals$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(ugoe_journals$issn_l, "-") %in% scimagojr_2018_OA$Issn_2 | str_remove(ugoe_journals$issn_l, "-") %in% scimagojr_2018_OA$Issn_2), TRUE, FALSE)
+
+ugoe_journals$WoS_idx <- ifelse((ugoe_journals$issn %in% c(wos$ISSN, wos$eISSN) | ugoe_journals$issn_l %in% c(wos$ISSN, wos$eISSN)), TRUE, FALSE)
+
+# subset of papers not indexed by WoS or Scimago / Scopus
+pqjs_ugoe <- ugoe_journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE)
+length(unique(pqjs_ugoe$issn_l)) # number of journals
+
+# Indexed by DOAJ
+journals_doaj <- read_csv("/Users/bschmidt/ownCloud/data/journals/journalcsv_doaj_20200321_1635_utf8.csv")
+
+ugoe_journals$doaj_idx <- ifelse((ugoe_journals$issn %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`) | ugoe_journals$issn_l %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`)), TRUE, FALSE)
+
+## journals not indexed by WoS, Scopus and DOAJ
+ugoe_journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE & doaj_idx == FALSE) %>% select(publisher, journal_full_title, issn_l) %>% unique() %>% datatable()
+
+# Uncritical  journals 
+# Copernicus Discussion papers 
+# Akademiai Kiado Zrt., European Journal of Microbiology and Immunology - part of Wolters Kluwer, founded in 1828 by the Hungarian Academy of Sciences (HAS)
+# a couple of titles by Elsevier, Springer Nature, SAGE
+
+# Potentially questionable journals
+# American Research Institute for Policy Development, INTERNATIONAL JOURNAL OF GENDER & WOMEN'S STUDIES - content may be fine for this journal, umbrella organisation not really a research institute, originally based in Bangladesh, publishing seems to be the main activity 
+# Austin Publishing Group, Austin Journal of Clinical Neurology - unclear
+# Elmer Press, Inc., Journal of Medical Cases
+# International Cardiovascular Forum Journal, JCSM Clinical Reports
+# ISPUB, The Internet Journal of Pain, Symptom Control and Palliative Care
+# Research Institute for Progression of Knowledge, International journal of education and social science - misleading information on indexing 
