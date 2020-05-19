@@ -13,17 +13,15 @@ author: BS
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, echo = FALSE, warning=FALSE)
 ```
 
-# OA publishing behavior at UGOE
-In the following we will explore aspects of Open Access (OA) publishing behaviour at the University of Göttingen (UGOE) which can be studied based on openly available datasets. We consider the spendings on OA publication charges, 
-
-The main datasets used are:
+# OA publishing at UGOE
+In this report we explore aspects of Open Access (OA) publishing behaviour at the University of Göttingen (UGOE), including the University Medical Center (UMG). Our observations are based on publicly available datasets, in particular we combined data from:
 
 * OpenAPC data, https://github.com/OpenAPC/openapc-de (download date as of processing of `r format(Sys.time(), '%d %B, %Y')`)
 * Journal lists provided by Directory of Open Access Journals (DOAJ), https://doaj.org/csv (as of 21 March 2020)
-* Journal list by Scimago (based on Scopus/Elsevier journal list) (as of 19 March 2020) https://www.scimagojr.com/journalrank.php?openaccess=true&out=xls
+* Journal list by Scimago (based on Scopus/Elsevier journal lists) (as of 19 March 2020) https://www.scimagojr.com/journalrank.php?openaccess=true&out=xls
 * Journal list by Web of Science (WoS), https://mjl.clarivate.com/home (as of 21 March 2020)
-* Crossref data, API accessed via R Crossref package 
-* Altmetrics data, API accessed via R Altmetrics package (as of 10 April 2020)
+* Crossref data, API accessed via R Crossref package (as of 19 May 2020)
+* Altmetrics data, API accessed via R Altmetrics package (as of 19 May 2020)
 
 ```{r}
 # install themes, if needed 
@@ -77,8 +75,8 @@ pal6 <- c("#D6E8FC", "#83B8D8", "#4D788D", "#7F8445", "#8AAB47", "#B3B985", "#E0
 
 ```
 
-## Spendings on OA publication costs (2012-2018) 
-```{r cache = TRUE}
+## Spendings on OA publication costs (2012-2019) 
+```{r cache = FALSE}
 # read data
 openapc <- read_csv("https://raw.githubusercontent.com/OpenAPC/openapc-de/master/data/apc_de.csv")
 
@@ -154,9 +152,9 @@ ugoe_journals <- ugoe %>% select(publisher, journal_full_title,  issn, issn_prin
 n_all <- length(unique(ugoe_journals$issn_l))
 
 ```
-Overall UGOE spend `r total` Euro on `r nrow(ugoe)` publications over the period 2012-2018, published in `r n_all` journals during the period `r min(ugoe$period)` to `r max(ugoe$period)`.  
+Overall UGOE spend `r total` Euro on `r nrow(ugoe)` publications, published in `r n_all` journals during the period `r min(ugoe$period)` to `r max(ugoe$period)`.  
 
-The following figure shows the spendings on APCs via UGOE's publication fund over time, from its inception in 2012 to 2018 (data for 2019 not available yet via OpenAPC). 
+The following figure shows the spendings on APCs via UGOE's publication fund over time, from its inception in `r min(ugoe$period)` to `r max(ugoe$period)`. 
 
 ```{r}
 # UGOE spendings on APCs over time 
@@ -176,7 +174,7 @@ ugoe %>% ggplot(aes(x = period, y = euro)) + geom_boxplot(aes(group = period)) +
 
 # average UGOE spendings by publisher
 ugoe %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n(), perc_pub = round(n/nrow(ugoe) * 100, 2), mean = round(mean(euro), 2), sd = round(sd(euro), 2), median = round(median(euro), 2), perc_costs = round(sum(euro)/total * 100, 2)) %>% arrange(desc(spend)) %>% datatable(filter = 'top')
-#caption = 'Table 2: UGOE APC spendings by publisher (2012-2018)'
+#caption = 'Table 2: UGOE APC spendings by publisher (2012-2019)'
 
 tab1 <- ugoe %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n(), perc_pub = round(n/nrow(ugoe) * 100, 2), mean = round(mean(euro), 2), sd = round(sd(euro), 2), median = round(median(euro), 2), perc_costs = round(sum(euro)/total * 100, 2)) %>% arrange(desc(spend))
 
@@ -229,10 +227,10 @@ n_qpub_ugoe <- length(unique(journals_qpub_ugoe$issn_l))
 ```
 Overall, of the `r n_all` journals that were used by UGOE authors in the context of the publication fund `r n_nWoS_nScopus_nDOAJ` journals were neither indexed by WoS, Scopus or DOAJ. 
 
-The following tables and plots summarise information on publications in the  potentially questionable journals as described above for UGOE, universities based in Germany, and all institutions which contributed to the OpenAPC dataset. 
+The following tables and plots summarise information on publications in the  potentially questionable journals as described above for UGOE, universities based in Germany, and all institutions which contributed to the OpenAPC dataset. It must be noted that for many institutions the data for 2019 is not yet available. In 2019 no co-funding was granted by the University of Göttingen's publication fund for any publications in the journals of the eleven considered potentially questionable publishers.  
 
 ```{r}
-# spending and number of papers in potentially questionable journals 2012-2018 by publisher
+# spending and number of papers in potentially questionable journals 2012-2019 by publisher
 ugoe %>% filter(publisher %in% qpub) %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n()) %>% datatable()
 #caption = 'Table 4: UGOE APC spendings (subset of potentially questionable publishers)'
 
@@ -263,7 +261,7 @@ openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub) %>% 
 openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
     labs(title = "Publications in PQJs - German universities", subtitle = "Subset of 11 publishers", caption = "Data source: OpenAPC") + theme_minimal()
 
-openapc %>% filter(publisher %in% qpub, period > 2012, period < 2019) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+openapc %>% filter(publisher %in% qpub, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
     labs(title = "Publications in PQJs - all institutions",  subtitle = "Subset of 11 publishers", caption = "Data source: OpenAPC") + theme_minimal() #+ scale_fill_manual(scale = cbPalette11)
 
 ```
@@ -277,10 +275,16 @@ openapc %>% filter(publisher %in% qpub, period > 2012, period < 2019) %>% group_
 pqjs_ugoe <- ugoe_journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE)
 #length(unique(pqjs_ugoe$issn_l)) # number of journals
 
-## journals neither indexed by WoS, Scopus or DOAJ - UGOE
+## journals neither indexed by WoS, Scopus nor DOAJ - UGOE
 ugoe_journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE & doaj_idx == FALSE) %>% select(publisher, journal_full_title, issn_l) %>% unique() %>% datatable()
 #caption = 'Table 6: Journals neither indexed by WoS, Scopus or DOAJ - UGOE authorship'
+
+# subset of not indexed papers
+papers_not_idx <- ugoe %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE & doaj_idx == FALSE)
+                                
+                                
 ```
+Overall, `r nrow(papers_not_idx)` journal articles have been published in `r length(unique(papers_not_idx$issn))` journals which were neither indexed by WoS, Scopus nor DOAJ. 
 
 ## OpenAPC spendings on papers in journals which are neither indexed by WoS, Scopus or DOAJ - Germany only
 ```{r}
@@ -339,8 +343,10 @@ ugoe_alt_metr <- purrr::map_df(ugoe_alt, "result")
 
 # 
 #write_csv(ugoe_alt_metr, "/Users/bschmidt/ownCloud/data/journals/ugoe_altmetrics_20200410.csv")
+# write_csv(ugoe_alt_metr, "/Users/bschmidt/ownCloud/data/journals/ugoe_altmetrics_20200519.csv")
+#write_csv(ugoe_alt_metr, "/Users/bschmidt/ownCloud/data/OpenAPC/data_output/ugoe_altmetrics_20200519.csv")
 
-ugoe_altmetrics <- read_csv("/Users/bschmidt/ownCloud/data/journals/ugoe_altmetrics_20200410.csv")
+ugoe_altmetrics <- read_csv("/Users/bschmidt/ownCloud/data/OpenAPC/data_output/ugoe_altmetrics_20200519.csv")
 
 #ugoe %>% ggplot(aes(x = period, y = cr_citation)) + geom_boxplot(aes(group = period)) + theme_minimal()
 
@@ -397,10 +403,12 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 
 
 # add citation information
-#ugoe$cr_citation <- rcrossref::cr_citation_count(x$doi)$count
-#write_csv(ugoe, "/Users/bschmidt/ownCloud/data/OpenAPC/openapc_ugoe_20200410.csv")
+#ugoe$cr_citation <- rcrossref::cr_citation_count(ugoe$doi)$count
+# warning message about 8 malformed DOIs
+#write_csv(ugoe, "/Users/bschmidt/ownCloud/data/OpenAPC/data_output/openapc_ugoe_20200410.csv")
+#write_csv(ugoe, "/Users/bschmidt/ownCloud/data/OpenAPC/data_output/openapc_ugoe_20200519.csv")
 
-ugoe <- read_csv("/Users/bschmidt/ownCloud/data/OpenAPC/openapc_ugoe_20200410.csv")
+ugoe <- read_csv("/Users/bschmidt/ownCloud/data/OpenAPC/data_output/openapc_ugoe_20200519.csv")
 
 # publications from 2015
 x <- ugoe %>% filter(period == 2015)
@@ -434,15 +442,16 @@ Altmetrics collects information about social media mentions for publications wit
 xx <- ugoe_altmetrics %>% select(doi, cited_by_posts_count)
 ugoe_xx <- left_join(ugoe, ugoe_altmetrics, by = c("doi", "doi"))
 
-ugoe_xx %>% ggplot(aes(x = period, y = cited_by_posts_count, color = WoS_idx)) + geom_boxplot(aes(group = period, color = WoS_idx), outlier.shape = NA) + geom_jitter(alpha = 0.5, width = 0.25, height = 0) + scale_y_continuous(trans = 'log10') + coord_flip() + theme_minimal() + ggtitle("Twitter mentions by publication year") + xlab("Citations") + ylab("Twitter posts") + labs(fill = "Indexed by WoS")
+ugoe_xx %>% ggplot(aes(x = period, y = cited_by_posts_count, color = WoS_idx)) + geom_boxplot(aes(group = period, color = WoS_idx), outlier.shape = NA) + geom_jitter(alpha = 0.5, width = 0.25, height = 0) + scale_y_continuous(trans = 'log10') + coord_flip() + theme_minimal() + ggtitle("Twitter mentions by publication year") + xlab("Year") + ylab("Twitter posts") + labs(fill = "Indexed by WoS")
 
 ```
 
-### Citations vs. twitter mentions
+### 
 
 ```{r}
 
-ugoe_xx %>% filter(cr_citation > 0 & cr_citation < 150) %>% ggplot(aes(cr_citation, cited_by_posts_count, color = WoS_idx)) + geom_point(alpha = 0.3) + scale_y_continuous(trans = 'log10')  + scale_x_continuous(trans = 'log10') + geom_smooth() + theme_minimal() + ggtitle("Citations vs. Twitter mentions (UGOE)", subtitle = "One highly cited tweeted paper taken out for 2014") + xlab("Citations") + ylab("Twitter posts") + labs(fill = "Indexed by WoS") 
+ugoe_xx %>% filter(cr_citation > 0 & cr_citation < 150) %>% 
+  ggplot(aes(cr_citation, cited_by_posts_count, color = WoS_idx)) + geom_point(alpha = 0.3) + scale_y_continuous(trans = 'log10')  + scale_x_continuous(trans = 'log10') + geom_smooth() + theme_minimal() + ggtitle("Citations vs. Twitter mentions (UGOE)", subtitle = "One highly cited paper taken out for 2014") + xlab("Citations") + ylab("Twitter posts") + labs(fill = "Indexed by WoS") 
 
 # list of frequently tweeted pubs (> 100 twitter mentions)
 #ugoe_xx %>% filter(cited_by_posts_count > 100) %>% select(period, journal_full_title, doi)
@@ -452,6 +461,6 @@ ugoe_xx %>% filter(cited_by_posts_count >= 50) %>% select(period, journal_full_t
 
 ```
 
-For the figure above it must be taken into account that mentions on Twitter could only be found for `r nrow(ugoe) - sum(is.na(ugoe_xx$cited_by_posts_count))` out of `r nrow(ugoe)` publications.
+For the figure above it must be taken into account that mentions on Twitter could only be found for `r nrow(ugoe) - sum(is.na(ugoe_xx$cited_by_posts_count))` out of `r nrow(ugoe)` publications. One highly cited paper was not taken into account for the regression based on citations vs. Twitter mentions (published in 2014, `r max(ugoe$cr_citation, na.rm = TRUE)` citations according to Crossref).
 
 The table shows publications which have been tweeted at least 50 times (original tweets and re-tweets).
