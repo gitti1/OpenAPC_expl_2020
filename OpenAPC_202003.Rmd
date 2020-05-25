@@ -1,12 +1,21 @@
 ---
 title: "OpenAPC Data Exploration"
-output: html_document
+#output: html_document
 always_allow_html: true
 # check which of the below creates HTML output before switching output format
 #  word_document: default 
 #  pdf_document: default
 date: "`r format(Sys.time(), '%d %B %Y')`"
-author: BS
+author: Birgit Schmidt
+output:
+  html_document:
+    df_print: paged
+    keep_md: yes
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    code_folding: hide
+
 ---
 
 ```{r setup, include=FALSE}
@@ -92,16 +101,16 @@ openapc <- read_csv("https://raw.githubusercontent.com/OpenAPC/openapc-de/master
 # add variables to OpenAPC dataset for indexing by DOAJ, Scimago (Scirus/Elsevier), Web of Science (WoS)
 # Scimago OA Journal Data 2018
 # separate list of ISSNs, sometimes only one provided (warning message: filled with NAs)
-scimagojr_2018_OA <- read_csv2("/Users/bschmidt/ownCloud/data/journals/scimagojr_2018_OA.csv") %>% separate(Issn, c("Issn_1", "Issn_2"), ", ")
+scimagojr_2018_OA <- read_csv2("data/scimagojr_2018_OA.csv") %>% separate(Issn, c("Issn_1", "Issn_2"), ", ")
 
 openapc$Scimago_idx <- ifelse((str_remove(openapc$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(openapc$issn, "-") %in% scimagojr_2018_OA$Issn_1), TRUE, FALSE)
 
 # read WoS core collections & combine (downloaded on 21 Mar 2020)
 # Science Citation Index Expanded (SCIE), Social Sciences Citation Index (SSCI), Arts & Humanities Citation Index (AHCI), Emerging Sources Citation Index (ESCI)
-wos_scie <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_EX.csv")
-wos_ssci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_SS.csv") 
-wos_ahci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_H.csv")
-wos_esci <- read_csv("/Users/bschmidt/ownCloud/data/journals/wos-collection_D.csv")
+wos_scie <- read_csv("data/wos-collection_EX.csv")
+wos_ssci <- read_csv("data/wos-collection_SS.csv") 
+wos_ahci <- read_csv("data/wos-collection_H.csv")
+wos_esci <- read_csv("data/wos-collection_D.csv")
 wos <- bind_rows(list(wos_scie, wos_ssci, wos_ahci, wos_esci)) %>% unique()
 
 #journals_qpub_ugoe$WoS_idx <- ifelse((journals_qpub_ugoe$issn %in% wos$ISSN | journals_qpub_ugoe$issn %in% wos$eISSN | journals_qpub_ugoe$issn_l %in% wos$ISSN | journals_qpub_ugoe$issn_l %in% wos$eISSN), TRUE, FALSE)
@@ -111,7 +120,7 @@ openapc$Scimago_idx <- ifelse((str_remove(openapc$issn, "-") %in% scimagojr_2018
 openapc$WoS_idx <- ifelse((openapc$issn %in% c(wos$ISSN, wos$eISSN) | openapc$issn_l %in% c(wos$ISSN, wos$eISSN)), TRUE, FALSE)
 
 # Indexed by DOAJ
-journals_doaj <- read_csv("/Users/bschmidt/ownCloud/data/journals/journalcsv_doaj_20200321_1635_utf8.csv")
+journals_doaj <- read_csv("data/journalcsv_doaj_20200321_1635_utf8.csv")
 
 openapc$doaj_idx <- ifelse((openapc$issn %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`) | openapc$issn_l %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`)), TRUE, FALSE)
 
@@ -341,12 +350,12 @@ ugoe_alt <- purrr::map(ugoe$doi, purrr::safely(function(x) {
 }))
 ugoe_alt_metr <- purrr::map_df(ugoe_alt, "result")
 
-# 
-#write_csv(ugoe_alt_metr, "/Users/bschmidt/ownCloud/data/journals/ugoe_altmetrics_20200410.csv")
-# write_csv(ugoe_alt_metr, "/Users/bschmidt/ownCloud/data/journals/ugoe_altmetrics_20200519.csv")
-#write_csv(ugoe_alt_metr, "/Users/bschmidt/ownCloud/data/OpenAPC/data_output/ugoe_altmetrics_20200519.csv")
+# save output 
+#write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200410.csv")
+#write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200519.csv")
+#write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200525.csv")
 
-ugoe_altmetrics <- read_csv("/Users/bschmidt/ownCloud/data/OpenAPC/data_output/ugoe_altmetrics_20200519.csv")
+ugoe_altmetrics <- read_csv("data/ugoe_altmetrics_20200519.csv")
 
 #ugoe %>% ggplot(aes(x = period, y = cr_citation)) + geom_boxplot(aes(group = period)) + theme_minimal()
 
@@ -402,13 +411,14 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 }
 
 
-# add citation information
+# add citation information (takes some time)
 #ugoe$cr_citation <- rcrossref::cr_citation_count(ugoe$doi)$count
 # warning message about 8 malformed DOIs
-#write_csv(ugoe, "/Users/bschmidt/ownCloud/data/OpenAPC/data_output/openapc_ugoe_20200410.csv")
-#write_csv(ugoe, "/Users/bschmidt/ownCloud/data/OpenAPC/data_output/openapc_ugoe_20200519.csv")
+#write_csv(ugoe, "data_output/openapc_ugoe_20200410.csv")
+#write_csv(ugoe, "data_output/openapc_ugoe_20200519.csv")
+#write_csv(ugoe, "data_output/openapc_ugoe_20200525.csv")
 
-ugoe <- read_csv("/Users/bschmidt/ownCloud/data/OpenAPC/data_output/openapc_ugoe_20200519.csv")
+ugoe <- read_csv("data_output/openapc_ugoe_20200525.csv")
 
 # publications from 2015
 x <- ugoe %>% filter(period == 2015)
@@ -426,7 +436,6 @@ multiplot(p1, p2, cols=2)
 ugoe %>% group_by(period, WoS_idx) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = mean(cr_citation), sd = sd(cr_citation), n = n())
 
 ugoe %>% group_by(period, doaj) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = mean(cr_citation), sd = sd(cr_citation), n = n())
-
 
 ## citations to papers in PQJs based on the qpub subset
 ugoe$qpub <- ugoe$publisher %in% qpub
