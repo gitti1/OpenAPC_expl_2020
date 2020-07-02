@@ -439,15 +439,17 @@ multiplot(p1, p2, cols=2)
 #x %>% group_by(WoS_idx) %>% summarise(median = median(cr_citation, na.rm = TRUE), mean = mean(cr_citation, na.rm = TRUE), sd = sd(cr_citation, na.rm = TRUE), n = n())
 #x %>% group_by(doaj) %>% summarise(median = median(cr_citation, na.rm = TRUE), mean = mean(cr_citation, na.rm = TRUE), sd = sd(cr_citation, na.rm = TRUE), n = n())
 
-ugoe %>% group_by(period, WoS_idx) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = mean(cr_citation), sd = sd(cr_citation), n = n())
+ugoe %>% group_by(period, WoS_idx) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = round(mean(cr_citation), 2), sd = round(sd(cr_citation), 2), n = n())
 
-ugoe %>% group_by(period, doaj) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = mean(cr_citation), sd = sd(cr_citation), n = n())
+ugoe %>% group_by(period, doaj) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = round(mean(cr_citation), 2), sd = round(sd(cr_citation), 2), n = n())
 
 ## citations to papers - for PQJs based on the qpub subset
 ugoe$qpub <- ugoe$publisher %in% qpub
 ugoe <- ugoe %>% mutate(qpub = factor(qpub, levels = c(TRUE, FALSE)))
 
 ugoe %>% ggplot(aes(x = period, y = cr_citation, color = qpub)) + geom_boxplot(aes(group = period, color = qpub), outlier.shape = NA) + geom_jitter(alpha = 0.5, width = 0.25, height = 0) + theme_minimal() + coord_flip() + facet_grid(~ qpub) + scale_y_continuous(trans = 'log10') + labs(title = "Citations to UGOE papers", subtitle ="Subset of 11 questionable publishers (label TRUE)") + xlab("Year") + ylab("Citations")
+
+ugoe %>% group_by(period, qpub) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = round(mean(cr_citation), 2), sd = round(sd(cr_citation), 2), n = n())
 
 ```
 
