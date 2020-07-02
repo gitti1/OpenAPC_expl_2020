@@ -25,11 +25,11 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, echo = FALSE, warning=FALSE
 # OA publishing at UGOE
 In this report we explore aspects of Open Access (OA) publishing behaviour at the University of Göttingen (UGOE), including the University Medical Center (UMG). Our observations are based on publicly available datasets, in particular we combined data from:
 
-* OpenAPC data, https://github.com/OpenAPC/openapc-de (download date as of processing of `r format(Sys.time(), '%d %B, %Y')`)
+* OpenAPC data, https://github.com/OpenAPC/openapc-de (download date as of processing on `r format(Sys.time(), '%d %B, %Y')`)
 * Journal lists provided by Directory of Open Access Journals (DOAJ), https://doaj.org/csv (as of 21 March 2020)
 * Journal list by Scimago (based on Scopus/Elsevier journal lists) (as of 19 March 2020) https://www.scimagojr.com/journalrank.php?openaccess=true&out=xls
 * Journal list by Web of Science (WoS), https://mjl.clarivate.com/home (as of 21 March 2020)
-* Crossref data, API accessed via R Crossref package (as of 19 May 2020)
+* Crossref data, API accessed via R Crossref package (as of 2 July 2020)
 * Altmetrics data, retrieved from altmetric.com, API accessed via R Altmetrics package (as of 2 July 2020)
 
 ```{r}
@@ -422,8 +422,9 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 #write_csv(ugoe, "data_output/openapc_ugoe_20200410.csv")
 #write_csv(ugoe, "data_output/openapc_ugoe_20200519.csv")
 #write_csv(ugoe, "data_output/openapc_ugoe_20200525.csv")
+#write_csv(ugoe, "data_output/openapc_ugoe_20200702.csv")
 
-ugoe <- read_csv("data_output/openapc_ugoe_20200525.csv")
+ugoe <- read_csv("data_output/openapc_ugoe_20200702.csv")
 
 # publications from 2015
 x <- ugoe %>% filter(period == 2015)
@@ -444,7 +445,9 @@ ugoe %>% group_by(period, doaj) %>% filter(!is.na(cr_citation)) %>% summarise(me
 
 ## citations to papers - for PQJs based on the qpub subset
 ugoe$qpub <- ugoe$publisher %in% qpub
-ugoe %>% ggplot(aes(x = period, y = cr_citation, color = qpub)) + geom_boxplot(aes(group = period, color = qpub), outlier.shape = NA) + geom_jitter(alpha = 0.5, width = 0.25, height = 0) + theme_minimal() + coord_flip() + facet_grid(~ qpub) + scale_y_continuous(trans = 'log10') + labs(title = "Citations to UGOE papers", subtitle ="Subset of 11 questionable publishers (label TRUE") + xlab("Year") + ylab("Citations")
+ugoe <- ugoe %>% mutate(qpub = factor(qpub, levels = c(TRUE, FALSE)))
+
+ugoe %>% ggplot(aes(x = period, y = cr_citation, color = qpub)) + geom_boxplot(aes(group = period, color = qpub), outlier.shape = NA) + geom_jitter(alpha = 0.5, width = 0.25, height = 0) + theme_minimal() + coord_flip() + facet_grid(~ qpub) + scale_y_continuous(trans = 'log10') + labs(title = "Citations to UGOE papers", subtitle ="Subset of 11 questionable publishers (label TRUE)") + xlab("Year") + ylab("Citations")
 
 ```
 
