@@ -30,7 +30,7 @@ In this report we explore aspects of Open Access (OA) publishing behaviour at th
 * Journal list by Scimago (based on Scopus/Elsevier journal lists) (as of 19 March 2020) https://www.scimagojr.com/journalrank.php?openaccess=true&out=xls
 * Journal list by Web of Science (WoS), https://mjl.clarivate.com/home (as of 21 March 2020)
 * Crossref data, API accessed via R Crossref package (as of 19 May 2020)
-* Altmetrics data, retrieved from altmetric.com, API accessed via R Altmetrics package (as of 19 May 2020)
+* Altmetrics data, retrieved from altmetric.com, API accessed via R Altmetrics package (as of 2 July 2020)
 
 ```{r}
 # install themes, if needed 
@@ -43,7 +43,7 @@ In this report we explore aspects of Open Access (OA) publishing behaviour at th
 # install.packages('data.table', dependencies = TRUE)
 
 
-# read libaries
+# read libraries
 library(tidyverse)
 library(plotly)
 #library(readr) # part of tidyverse
@@ -52,7 +52,7 @@ library(rcrossref)
 library(lubridate)
 library(rAltmetric)
 library(scholar) # retrieve information from Google Scholar 
-# table libaries
+# table libraries
 library(xtable)
 library(DT)
 # arranging plots
@@ -196,6 +196,7 @@ The four most popular publishers in terms of publications (Springer Nature, PLOS
 In the following exploration we consider a subset of publishers/journals which may be classified as questionable (in the following referred to as PQJs):
 
 * Academic Journals: massive list of journals with very small number of papers, questionable author affiliation information (e.g. "Department of Fiction, Antioch University" does not seem to exist, https://doi.org/10.5897/IJEL2015.0889), unlikely paper processing dates (e.g. Received: 12 December 2015; Accepted: 14 June 2019; Published: 30 June 2019)
+* OMICS Publishing Group - was listed as predatory, e.g. over the validity of peer review, the use of scientists' names as journal editors and conference speaker without their knowledge or permission, and trademark violations
 * Scientific Research Publishing, Inc. - questionable impact metrics
 * Impact Journals, LLC - was listed as predatory, however, currently indexed by WoS
 * Open Access Text Pvt, Ltd. - unclear
@@ -345,18 +346,21 @@ Citation counts are based on Crossref citation data, i.e. only available for pub
 
 #' from Altmetrics
 library(rAltmetric)
-ugoe_alt <- purrr::map(ugoe$doi, purrr::safely(function(x) {
-  rAltmetric::altmetrics(doi = x) %>%
-  rAltmetric::altmetric_data()
-}))
-ugoe_alt_metr <- purrr::map_df(ugoe_alt, "result")
+
+# run when updating altmetrics data
+#ugoe_alt <- purrr::map(ugoe$doi, purrr::safely(function(x) {
+#  rAltmetric::altmetrics(doi = x) %>%
+#  rAltmetric::altmetric_data()
+#}))
+#ugoe_alt_metr <- purrr::map_df(ugoe_alt, "result")
 
 # save output 
 #write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200410.csv")
 #write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200519.csv")
 #write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200525.csv")
+#write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200702.csv")
 
-ugoe_altmetrics <- read_csv("data/ugoe_altmetrics_20200519.csv")
+ugoe_altmetrics <- read_csv("data_output/ugoe_altmetrics_20200702.csv")
 
 #ugoe %>% ggplot(aes(x = period, y = cr_citation)) + geom_boxplot(aes(group = period)) + theme_minimal()
 
@@ -450,7 +454,7 @@ The following figure shows Twitter mentions of papers which have received co-fun
 ```{r}
 # altmetrics
 xx <- ugoe_altmetrics %>% select(doi, cited_by_posts_count)
-ugoe_xx <- left_join(ugoe, ugoe_altmetrics, by = c("doi", "doi"))
+ugoe_xx <- left_join(ugoe, ugoe_altmetrics, by = c("doi" = "doi"))
 
 ugoe_xx %>% ggplot(aes(x = period, y = cited_by_posts_count, color = WoS_idx)) + geom_boxplot(aes(group = period, color = WoS_idx), outlier.shape = NA) + geom_jitter(alpha = 0.5, width = 0.25, height = 0) + scale_y_continuous(trans = 'log10') + coord_flip() + theme_minimal() + ggtitle("Twitter mentions of UGOE papers by publication year") + xlab("Year") + ylab("Twitter posts") + labs(fill = "Indexed by WoS")
 
