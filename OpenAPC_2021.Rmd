@@ -197,9 +197,9 @@ tab1 <- ugoe %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n(), p
 The four most popular publishers in terms of publications (Springer Nature, PLOS, Frontiers Media SA, Springer Science + Business Media) published `r sum(tab1$n[1:4])` articles (`r sum(tab1$perc_pub[1:4])`%) which corresponds to a share of `r sum(tab1$perc_costs[1:4])`% of the spendings on APCs. 
 
 ## Identifying potentially questionable journals and publishers
-In the following exploration we consider a subset of publishers/journals which may be classified as questionable (in the following referred to as PQJs):
+In the following exploration we consider a subset of publishers/journals which may be classified as questionable (in the following referred to as PQJs, note that in the plots below we also use subsets of this list):
 
-* Academic Journals: massive list of journals with very small number of papers, questionable author affiliation information (e.g. "Department of Fiction, Antioch University" does not seem to exist, https://doi.org/10.5897/IJEL2015.0889), unlikely paper processing dates (e.g. Received: 12 December 2015; Accepted: 14 June 2019; Published: 30 June 2019)
+* Academic Journals: massive list of journals with very small number of papers, was listed in Beall's list but made a formal appeal and considers itself unfairly treated despite its efforts (cf. https://academicjournals.org/about_us) - unclear
 * OMICS Publishing Group - was listed as predatory, e.g. over the validity of peer review, the use of scientists' names as journal editors and conference speaker without their knowledge or permission, and trademark violations
 * Scientific Research Publishing, Inc. - questionable impact metrics
 * Impact Journals, LLC - was listed as predatory, however, currently indexed by WoS
@@ -222,18 +222,6 @@ n_nWoS_nScopus_nDOAJ <- length(unique(pqjs_ugoe$issn_l))
 
 # potentially questionable publishers
 qpub <- c("Academic Journals", "Baishideng Publishing Group Inc.", "Bentham Science Publishers Ltd.", "Boffin Access", "Canadian Center of Science and Education", "Cloud Publications", "e-Century Publishing Corporation", "European Centre for Research, Training and Development, United Kingdom", "Impact Journals, LLC",  "Jacobs Publishers", "OMICS Publishing Group", "Open Access Text Pvt, Ltd.", "Scientific Research Publishing, Inc.")
-# Academic Journals: massive list of journals with very small number of papers, was listed in Beall's list but made a formal appeal and considers itself unfairly treated despite its efforts (cf. https://academicjournals.org/about_us)
-# Scientific Research Publishing, Inc. - questionable impact metrics
-# Impact Journals, LLC - was listed as predatory, however, currently indexed by WoS
-# Open Access Text Pvt, Ltd.
-# Canadian Center of Science and Education - questionable impact metrics
-# Baishideng Publishing Group Inc. - unclear
-# e-Century Publishing Corporation - unclear
-# Bentham Science Publishers Ltd. - unclear, was listed as predatory, eg for spamming, see also https://rationalwiki.org/wiki/Bentham_Science_Publishers 
-# Cloud Publications - many nearly empty journals, OJS-based platform
-# Jacobs Publishers - nearly empty journals 
-# European Centre for Research, Training and Development, United Kingdom - unclear
-# Boffin Access - unclear
 
 # unique journals - 33 journals; 29 indexed in CrossRef
 journals_qpub_ugoe <- ugoe %>% filter(publisher %in% qpub) %>% select(publisher, journal_full_title,  issn, issn_print, issn_electronic, issn_l,  license_ref, indexed_in_crossref) %>% unique()
