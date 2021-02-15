@@ -1,0 +1,620 @@
+---
+title: "OpenAPC Data Exploration"
+#output: html_document
+always_allow_html: true
+# check which of the below creates HTML output before switching output format
+#  word_document: default 
+#  pdf_document: default
+date: "`r format(Sys.time(), '%d %B %Y')`"
+author: Birgit Schmidt
+output:
+  # word_document
+  html_document:
+    df_print: paged
+  keep_md: yes
+  toc: yes
+  toc_depth: 2
+  toc_float: yes
+  code_folding: hide
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, echo = FALSE, warning=FALSE)
+```
+
+# OA publishing at UGOE
+In this report we explore aspects of Open Access (OA) publishing behaviour at the University of Göttingen (UGOE), including the University Medical Center (UMG). Our observations are based on publicly available datasets, in particular we combined data from:
+
+* OpenAPC data, https://github.com/OpenAPC/openapc-de (download date as of processing on `r format(Sys.time(), '%d %B, %Y')`)
+* Journal lists provided by Directory of Open Access Journals (DOAJ), https://doaj.org/csv (as of 21 March 2020)
+* Journal list by Scimago (based on Scopus/Elsevier journal lists) (as of 19 March 2020) https://www.scimagojr.com/journalrank.php?openaccess=true&out=xls
+* Journal list by Web of Science (WoS), https://mjl.clarivate.com/home (as of 21 March 2020)
+* Crossref data, API accessed via R Crossref package (as of 2 July 2020)
+* Altmetrics data, retrieved from altmetric.com, API accessed via R Altmetrics package (as of 2 July 2020)
+
+```{r}
+# install themes, if needed 
+# install.packages("hrbrthemes")
+
+# loading was throwing an error, re-install depending libraries before installing hrbrthemes
+# remove.packages(c("ggplot2", "data.table"))
+# install.packages('Rcpp', dependencies = TRUE)
+# install.packages('ggplot2', dependencies = TRUE)
+# install.packages('data.table', dependencies = TRUE)
+
+
+# read libraries
+library(tidyverse)
+library(plotly)
+library(gridExtra)
+#library(readr) # part of tidyverse
+#library(tidyr) # dto
+library(rcrossref)
+library(lubridate)
+library(rAltmetric)
+library(scholar) # retrieve information from Google Scholar 
+# table libraries
+library(xtable)
+library(DT)
+# arranging plots
+#library(ggpubr)
+# color palettes
+#library(hrbrthemes)
+#library(viridis)
+#library(wesanderson)
+#library(prismatic)
+library(paletteer)
+#library(LaCroixColoR)
+#library(DataExplorer) # e.g. create_report(dataset)
+library(xml2)
+
+# palette for plots
+# colorblind palettes
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+# source: http://mkweb.bcgsc.ca/color/
+cbPalette13 <- c("#000000", "#006E82", "#8214A0", "#005AC8", "#00A0FA", "#FA78FA", "#14D2DC", "#AA0A3C", "#0A9B4B", "#FF825F", "#EAD644", "#A0FA82", "#FAE6BE")
+# black and pink removed
+cbPalette11 <- c("#006E82", "#8214A0", "#005AC8", "#00A0FA", "#14D2DC", "#AA0A3C", "#0A9B4B", "#FF825F", "#EAD644", "#A0FA82", "#FAE6BE")
+
+pastel16 <- rep(paletteer_d("rcartocolor::Pastel"), length.out = 16)
+#pal2 <- rep(paletteer_d("rcartocolor::Pastel"), length.out = 12)
+#pal3 <- lacroix_palette("Pamplemousse", n = 12, type = "continuous")
+#pal4 <- lacroix_palette("PassionFruit", n = 12, type = "continuous")
+pal5 <- c("#EDA5B9", "#BA7375", "#BE604B", "#92716D","#79405F",  "#3C4F9C", "#4D72B1", "#60A1D1", "#9CB9DE", "#A0A490", "#C7B858", "#606624", "#6A7272", "#768D45", "#68715E", "#489DDE", "#9B2227", "#658C24", "#EB893A", "#606624", "#439DAC")
+pal6 <- c("#D6E8FC", "#83B8D8", "#4D788D", "#7F8445", "#8AAB47", "#B3B985", "#E0EAC2", "#D5DFD7", "#D8D8C8", "#E6DFA9", "#FEF3C8", "#A7BBD7", "#588DBF", "#287CC4")
+
+```
+
+## Spendings on OA publication costs (2012-2019) 
+```{r cache = FALSE}
+# read data
+openapc <- read_csv("https://raw.githubusercontent.com/OpenAPC/openapc-de/master/data/apc_de.csv")
+
+# variables
+# names(openapc)
+# [1] "institution"         "period"              "euro"                "doi"              
+# [5] "is_hybrid"           "publisher"           "journal_full_title"  "issn"            
+# [9] "issn_print"          "issn_electronic"     "issn_l"              "license_ref"     
+# [13] "indexed_in_crossref" "pmid"                "pmcid"               "ut"         
+# [17] "url"                 "doaj" 
+
+# status of data contribution by year and number of institutions
+openapc %>% group_by(period) %>% summarize(n_records = n(), n_inst = length(unique(institution)))
+
+# add variables to OpenAPC dataset for indexing by DOAJ, Scimago (Scirus/Elsevier), Web of Science (WoS)
+# Scimago OA Journal Data 2018
+# separate list of ISSNs, sometimes only one provided (warning message: filled with NAs)
+scimagojr_2018_OA <- read_csv2("data/scimagojr_2018_OA.csv") %>% separate(Issn, c("Issn_1", "Issn_2"), ", ")
+
+openapc$Scimago_idx <- ifelse((str_remove(openapc$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(openapc$issn, "-") %in% scimagojr_2018_OA$Issn_1), TRUE, FALSE)
+
+# read WoS core collections & combine (downloaded on 21 Mar 2020)
+# Science Citation Index Expanded (SCIE), Social Sciences Citation Index (SSCI), Arts & Humanities Citation Index (AHCI), Emerging Sources Citation Index (ESCI)
+wos_scie <- read_csv("data/wos-collection_EX.csv")
+wos_ssci <- read_csv("data/wos-collection_SS.csv") 
+wos_ahci <- read_csv("data/wos-collection_H.csv")
+wos_esci <- read_csv("data/wos-collection_D.csv")
+wos <- bind_rows(list(wos_scie, wos_ssci, wos_ahci, wos_esci)) %>% unique()
+
+#journals_qpub_ugoe$WoS_idx <- ifelse((journals_qpub_ugoe$issn %in% wos$ISSN | journals_qpub_ugoe$issn %in% wos$eISSN | journals_qpub_ugoe$issn_l %in% wos$ISSN | journals_qpub_ugoe$issn_l %in% wos$eISSN), TRUE, FALSE)
+
+openapc$Scimago_idx <- ifelse((str_remove(openapc$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(openapc$issn, "-") %in% scimagojr_2018_OA$Issn_1 | str_remove(openapc$issn_l, "-") %in% scimagojr_2018_OA$Issn_2 | str_remove(openapc$issn_l, "-") %in% scimagojr_2018_OA$Issn_2), TRUE, FALSE)
+
+openapc$WoS_idx <- ifelse((openapc$issn %in% c(wos$ISSN, wos$eISSN) | openapc$issn_l %in% c(wos$ISSN, wos$eISSN)), TRUE, FALSE)
+
+# Indexed by DOAJ
+journals_doaj <- read_csv("data/journalcsv_doaj_20200321_1635_utf8.csv")
+
+openapc$doaj_idx <- ifelse((openapc$issn %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`) | openapc$issn_l %in% c(journals_doaj$`Journal ISSN (print version)`, journals_doaj$`Journal EISSN (online version)`)), TRUE, FALSE)
+
+# all journal based on OpenAPC data
+journals <- openapc %>% select(publisher, journal_full_title,  issn, issn_print, issn_electronic, issn_l,  license_ref, indexed_in_crossref, Scimago_idx, WoS_idx, doaj_idx) %>% unique()
+# note that there will still be duplicates as the ISSNs are a bit mixed up
+
+# subset of papers not indexed by WoS or Scimago / Scopus or DOAJ
+pqjs <- journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE & doaj_idx == FALSE)
+n_pqjs <- length(unique(pqjs$issn_l)) # number of journals
+
+```
+Our analysis is based on the OpenAPC dataset which brings together information about article publications costs (APCs) for `r nrow(openapc)` publications from `r length(unique(openapc$institution))` institutions (for the period from `r min(openapc$period)` to `r max(openapc$period)`). These journal articles were published in `r length(unique(openapc$issn_l))` journals of which `r n_pqjs` were neither indexed by Web of Science, Scimago/Scirus nor the Directory of Open Access journals (DOAJ). 
+
+In the following, we focus on the subset for the University of Göttingen (UGOE) including the University Medical Center (UMG).  
+\newline
+
+
+
+```{r}
+# UGOE subset
+ugoe <- openapc %>% filter(institution == "Goettingen U")
+
+# UGOE spendings by period
+ugoe %>% group_by(period) %>% 
+  summarize(spend = sum(euro), n = n(), mean = round(mean(euro), 0), median = round(median(euro), 0)) %>%
+  datatable(filter = 'top')
+#caption = 'Table 1: UGOE APC spendings by period'
+
+# total spending at UGOE
+#ugoe %>% summarize(total_spend = sum(euro), n = n())
+
+total <- sum(ugoe$euro)
+
+# all journals - UGOE OA co-funded
+ugoe_journals <- ugoe %>% select(publisher, journal_full_title,  issn, issn_print, issn_electronic, issn_l,  license_ref, indexed_in_crossref, Scimago_idx, WoS_idx, doaj_idx) %>% unique()
+
+n_all <- length(unique(ugoe_journals$issn_l))
+
+```
+Overall UGOE spend `r total` Euro on `r nrow(ugoe)` publications, published in `r n_all` journals during the period `r min(ugoe$period)` to `r max(ugoe$period)`.  
+
+The following figure shows the spendings on APCs via UGOE's publication fund over time, from its inception in `r min(ugoe$period)` to `r max(ugoe$period)`. 
+
+```{r}
+# UGOE spendings on APCs over time 
+ugoe %>% group_by(period) %>% summarize(spend = sum(euro), n = n()) %>% ggplot(aes(period, spend)) + geom_bar(stat = "identity", fill = "lightblue") + ggtitle("Publication fund spendings at UGOE (incl. UMG)") + theme_minimal() + xlab("year") + ylab("spend (EUR)")
+
+```
+
+The following tables and figures show the development of the average costs over time. The increase per year varies substantially, with stronger increases from 2012 to 2016, until an average APC of about 1,600 Euros per article was reached (based on median). 
+
+ 
+```{r}
+# average over time 
+ugoe %>% group_by(period) %>% summarize(spend = sum(euro), n = n(), mean = round(mean(euro), 2), sd = round(sd(euro), 2), median = round(median(euro), 2)) %>% datatable(filter = 'top')
+
+# ugoe %>% ggplot(aes(x = period, y = euro)) + geom_boxplot(aes(group = period)) + ggtitle("Trend of publication fees (UGOE incl. UMG)") + theme_minimal()
+plot_ly(ugoe, y = ~euro, color = ~as.factor(period), type = "box") %>% layout(title = "Trend of publication fees at UGOE (incl. UMG)", showlegend = FALSE)    
+
+# average UGOE spendings by publisher
+ugoe %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n(), perc_pub = round(n/nrow(ugoe) * 100, 2), mean = round(mean(euro), 2), sd = round(sd(euro), 2), median = round(median(euro), 2), perc_costs = round(sum(euro)/total * 100, 2)) %>% arrange(desc(spend)) %>% datatable(filter = 'top')
+#caption = 'Table 2: UGOE APC spendings by publisher (2012-2019)'
+
+tab1 <- ugoe %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n(), perc_pub = round(n/nrow(ugoe) * 100, 2), mean = round(mean(euro), 2), sd = round(sd(euro), 2), median = round(median(euro), 2), perc_costs = round(sum(euro)/total * 100, 2)) %>% arrange(desc(spend))
+
+```
+
+The four most popular publishers in terms of publications (Springer Nature, PLOS, Frontiers Media SA, Springer Science + Business Media) published `r sum(tab1$n[1:4])` articles (`r sum(tab1$perc_pub[1:4])`%) which corresponds to a share of `r sum(tab1$perc_costs[1:4])`% of the spendings on APCs. 
+
+## Identifying potentially questionable journals and publishers
+In the following exploration we consider a subset of publishers/journals which may be classified as questionable (in the following referred to as PQJs):
+
+* Academic Journals: massive list of journals with very small number of papers, questionable author affiliation information (e.g. "Department of Fiction, Antioch University" does not seem to exist, https://doi.org/10.5897/IJEL2015.0889), unlikely paper processing dates (e.g. Received: 12 December 2015; Accepted: 14 June 2019; Published: 30 June 2019)
+* OMICS Publishing Group - was listed as predatory, e.g. over the validity of peer review, the use of scientists' names as journal editors and conference speaker without their knowledge or permission, and trademark violations
+* Scientific Research Publishing, Inc. - questionable impact metrics
+* Impact Journals, LLC - was listed as predatory, however, currently indexed by WoS
+* Open Access Text Pvt, Ltd. - unclear
+* Canadian Center of Science and Education - questionable impact metrics
+* Baishideng Publishing Group Inc. - unclear
+* e-Century Publishing Corporation - unclear
+* Bentham Science Publishers Ltd. - unclear, was listed as predatory, e.g. for spamming, see also https://rationalwiki.org/wiki/Bentham_Science_Publishers 
+* Cloud Publications - many nearly empty journals, overstating/misleading benefits of OA for authors (e.g. "maximize the citation", "fast publishing", cf. http://www.cloud-journals.com/cloudjournals-open-access-policy.html)
+* Jacobs Publishers - nearly empty journals 
+* European Centre for Research, Training and Development, United Kingdom - claims to be indexed by DOAJ, many nearly empty journals
+* Boffin Access - unclear
+
+```{r}
+
+# subset of papers not indexed by WoS or Scimago / Scopus
+pqjs_ugoe <- ugoe_journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE & doaj_idx == FALSE)
+n_nWoS_nScopus_nDOAJ <- length(unique(pqjs_ugoe$issn_l)) 
+
+
+# potentially questionable publishers
+qpub <- c("Academic Journals", "Baishideng Publishing Group Inc.", "Bentham Science Publishers Ltd.", "Boffin Access", "Canadian Center of Science and Education", "Cloud Publications", "e-Century Publishing Corporation", "European Centre for Research, Training and Development, United Kingdom", "Impact Journals, LLC",  "Jacobs Publishers", "OMICS Publishing Group", "Open Access Text Pvt, Ltd.", "Scientific Research Publishing, Inc.")
+# Academic Journals: massive list of journals with very small number of papers, was listed in Beall's list but made a formal appeal and considers itself unfairly treated despite its efforts (cf. https://academicjournals.org/about_us)
+# Scientific Research Publishing, Inc. - questionable impact metrics
+# Impact Journals, LLC - was listed as predatory, however, currently indexed by WoS
+# Open Access Text Pvt, Ltd.
+# Canadian Center of Science and Education - questionable impact metrics
+# Baishideng Publishing Group Inc. - unclear
+# e-Century Publishing Corporation - unclear
+# Bentham Science Publishers Ltd. - unclear, was listed as predatory, eg for spamming, see also https://rationalwiki.org/wiki/Bentham_Science_Publishers 
+# Cloud Publications - many nearly empty journals, OJS-based platform
+# Jacobs Publishers - nearly empty journals 
+# European Centre for Research, Training and Development, United Kingdom - unclear
+# Boffin Access - unclear
+
+# unique journals - 33 journals; 29 indexed in CrossRef
+journals_qpub_ugoe <- ugoe %>% filter(publisher %in% qpub) %>% select(publisher, journal_full_title,  issn, issn_print, issn_electronic, issn_l,  license_ref, indexed_in_crossref) %>% unique()
+
+n_qpub_ugoe <- length(unique(journals_qpub_ugoe$issn_l))
+```
+Overall, of the `r n_all` journals that were used by UGOE authors in the context of the publication fund `r n_nWoS_nScopus_nDOAJ` journals were neither indexed by WoS, Scopus or DOAJ. 
+
+The following tables and plots summarise information on publications in the  potentially questionable journals as described above for UGOE, universities based in Germany, and all institutions which contributed to the OpenAPC dataset. It must be noted that for many institutions the data for 2019 is not yet available. In 2019 no co-funding was granted by the University of Göttingen's publication fund for any publications in the journals of the eleven considered potentially questionable publishers.  
+
+```{r cache=TRUE}
+# spending and number of papers in potentially questionable journals 2012-2019 by publisher
+ugoe %>% filter(publisher %in% qpub) %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n()) %>% datatable()
+#caption = 'Table 4: UGOE APC spendings (subset of potentially questionable publishers)'
+
+# list period as well
+ugoe_pub_period <- ugoe %>% filter(publisher %in% qpub) %>% group_by(publisher, period) %>% summarize(spend = sum(euro), n = n()) %>% arrange(period, desc(n)) 
+#ugoe_pub_period %>% datatable(filter = 'top')
+ugoe_pub_period
+
+# PQJ papers over time by publisher - UGOE
+ugoe %>% filter(publisher %in% qpub) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    labs(title = "Publications in potentially questionable journals (UGOE incl. UMG)", subtitle = "Subset of 13 publishers", caption = "Data source: OpenAPC") + theme_minimal() + scale_x_continuous(limits = c(2013, 2019))
+# + coord_flip()
+# + scale_fill_manual(values = cbPalette11) 
+# + scale_fill_viridis(discrete = TRUE)
+
+# pubs in list of questionable journals - Germany
+uni_DE <- c("Bamberg U","Duisburg-Essen U","FU Berlin","Konstanz U","Leipzig U", "TU Clausthal","Muenchen LMU","Goettingen U","Heidelberg U","Hamburg TUHH","Bayreuth U","KIT",  "TU Chemnitz","TU Dresden","Dortmund TU","Bochum U","Giessen U","Kassel U", "TU Ilmenau", "TU Muenchen", "Hannover U", "Wuerzburg U", "Potsdam U", "Bremen U","Erlangen Nuernberg U","Tuebingen U", "Ulm U", "Freiburg U", "Oldenburg U", "Regensburg U", "TiHo Hannover", "Münster U","JGU Mainz", "TU Berlin", "Trier U", "Osnabrück U","TU Braunschweig","Stuttgart U","TU Darmstadt", "MLU Halle-Wittenberg",  "Bielefeld U", "Frankfurt U","TH Wildau","Charité - Universitätsmedizin Berlin", "Rostock U", "Marburg U", "Greifswald U", "HU Berlin",  "Mannheim U", "Passau U")  
+
+# research institutions
+rpfo_DE <- c("DLR", "FZJ - ZB", "Fraunhofer-Gesellschaft Publishing Fund", "GEOMAR", "GIGA", "IPN - Leibniz Kiel", "Leibniz-Fonds", "GFZ-Potsdam", "INM - Leibniz-Institut für Neue Materialien", "Leibniz-IGB", "MDC", "MPG","PIK-Potsdam", "TIB", "UFZ", "Weierstrass Institute for Applied Analysis and Stochastics", "Institut für Arbeitsmarkt- und Berufsforschung")
+rpfo_leibniz <- c("Leibniz-Fonds", "GIGA", "IPN - Leibniz Kiel", "INM - Leibniz-Institut für Neue Materialien", "Leibniz-IGB", "TIB", "Weierstrass Institute for Applied Analysis and Stochastics")
+rpfo_helmholtz <- c("FZJ - ZB", "GEOMAR", "GFZ-Potsdam", "MDC", "PIK-Potsdam", "UFZ")
+# 
+
+# Spendings on potentially questionable journals - German universities
+openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub) %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n()) %>% arrange(desc(n)) %>% datatable(filter = 'top') 
+#caption = 'Table 5: APC spendings on potentially questionable publishers - all German universities'
+
+# Publication at German universities - subset of questionable publishers as defined above
+openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    labs(title = "Publications in potentially questionable journals - German universities", subtitle = "Subset of 13 publishers", caption = "Data source: OpenAPC") + theme_minimal() 
+
+openapc %>% filter(publisher %in% qpub, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    labs(title = "Publications in potentially questionable journals - all institutions",  subtitle = "Subset of 13 publishers", caption = "Data source: OpenAPC") + theme_minimal() #+ scale_fill_manual(scale = cbPalette11)
+
+# panel plot
+# rename the factor levels before plotting
+openapc$publisher <- factor(openapc$publisher, levels = c("Academic Journals", "Baishideng Publishing Group Inc.", "Bentham Science Publishers Ltd.", "Boffin Access", "Canadian Center of Science and Education", "Cloud Publications", "e-Century Publishing Corporation", "European Centre for Research, Training and Development, United Kingdom", "Impact Journals, LLC",  "Jacobs Publishers", "OMICS Publishing Group", "Open Access Text Pvt, Ltd.", "Scientific Research Publishing, Inc."), labels = c("AJ", "BPG", "BSP", "BA", "CCSE",  "CP", "eCPC", "ECRTD", "IJ", "JP", "OMICS", "OATP", "SRP"))
+ugoe$publisher <- factor(ugoe$publisher, levels = c("Academic Journals", "Baishideng Publishing Group Inc.", "Bentham Science Publishers Ltd.", "Boffin Access", "Canadian Center of Science and Education", "Cloud Publications", "e-Century Publishing Corporation", "European Centre for Research, Training and Development, United Kingdom", "Impact Journals, LLC",  "Jacobs Publishers", "OMICS Publishing Group", "Open Access Text Pvt, Ltd.", "Scientific Research Publishing, Inc."), labels = c("AJ", "BPG", "BSP", "BA", "CCSE",  "CP", "eCPC", "ECRTD", "IJ", "JP", "OMICS", "OATP", "SRP"))
+
+qpub2 <- c("AJ", "BPG", "BSP", "BA", "CCSE",  "CP", "eCPC", "ECRTD", "IJ", "JP", "OMICS", "OATP", "SRP")
+
+# ohne Impact Journals und Academic Journals
+qpub4 <- c("BPG", "BSP", "BA", "CCSE",  "CP", "eCPC", "ECRTD", 
+           "JP", "OMICS", "OATP", "SRP")
+
+p1 <- ugoe %>% filter(publisher %in% qpub2) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    labs(title = "University of Göttingen") + theme_minimal() + scale_x_continuous(limits = c(2013, 2019)) + theme(legend.position = "none")
+p2 <- openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub2, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") + labs(title = "German universities") + theme_minimal() + theme(legend.position = "none")
+p3 <- openapc %>% filter(publisher %in% qpub2, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    labs(title = "All institutions") + theme_minimal() + theme(legend.position = "none")
+
+p1a <- ugoe %>% filter(publisher %in% qpub2) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    labs(title = "Universität Göttingen") + xlab("") + ylab("") + theme_minimal() + scale_x_continuous(limits = c(2013, 2019)) + theme(legend.position = "none")
+p2a <- openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub2, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") + labs(title = "Universitäten in \n Deutschland") + xlab("") + ylab("") + theme_minimal() + theme(legend.position = "none")
+p3a <- openapc %>% filter(publisher %in% qpub2, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    labs(title = "Alle Institutionen") + theme_minimal() + xlab("") + ylab("") + theme(legend.position = "none")
+
+p1c <- ugoe %>% filter(publisher %in% qpub4) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    labs(title = "Universität Göttingen") + xlab("") + ylab("") + theme_minimal() + scale_x_continuous(limits = c(2013, 2019)) + theme(legend.position = "none")
+p2c <- openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub4, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") + labs(title = "Universitäten in \n Deutschland") + xlab("") + ylab("") + theme_minimal() + theme(legend.position = "none")
+p3c <- openapc %>% filter(publisher %in% qpub4, period > 2012) %>% group_by(period, publisher) %>% summarize(n = n()) %>% ggplot(aes(period, n)) + geom_bar(aes(fill = publisher), stat = "identity") +
+    labs(title = "Alle Institutionen") + theme_minimal() + xlab("") + ylab("") + theme(legend.position = "none")
+
+# grid.arrange(p1, p2, p3, nrow = 1)  
+
+# arranged plot with joint legend
+library(grid)
+library(cowplot)
+library(rlang)
+
+# arrange the three plots in a single row
+prow <- plot_grid(
+  p1 + theme(legend.position="none"),
+  p2 + theme(legend.position="none"),
+  p3 + theme(legend.position="none"),
+  align = 'vh',
+  labels = c("A", "B", "C"),
+  hjust = -1,
+  nrow = 1
+)
+
+# extract a legend that is laid out horizontally
+legend_b <- get_legend(
+  p1 + 
+    guides(color = guide_legend(nrow = 1)) +
+    theme(legend.position = "bottom")
+)
+
+# add the legend underneath the row we made earlier. Give it 10%
+# of the height of one plot (via rel_heights).
+plot_grid(prow, legend_b, ncol = 1, rel_heights = c(1, .5))
+
+#### German-language version
+# arrange the three plots in a single row
+prow2 <- plot_grid(
+  p1a + theme(legend.position="none"),
+  p2a + theme(legend.position="none"),
+  p3a + theme(legend.position="none"),
+  align = 'vh',
+  labels = c("A", "B", "C"),
+  hjust = -1,
+  nrow = 1
+)
+
+legend_c <- get_legend(
+  p1a + 
+    guides(color = guide_legend(nrow = 1)) +
+    theme(legend.position = "bottom") + scale_fill_discrete(name="Verlag")
+)
+
+plot_grid(prow2, legend_c, ncol = 1, rel_heights = c(1, .5))
+
+#### ohne Impact Journals und Academic Journals
+prow4 <- plot_grid(
+  p1c + theme(legend.position="none"),
+  p2c + theme(legend.position="none"),
+  p3c + theme(legend.position="none"),
+  align = 'vh',
+  labels = c("A", "B", "C"),
+  hjust = -1,
+  nrow = 1
+)
+
+legend_d <- get_legend(
+  p1c + 
+    guides(color = guide_legend(nrow = 1)) +
+    theme(legend.position = "bottom") + scale_fill_discrete(name="Verlag")
+)
+
+plot_grid(prow4, legend_d, ncol = 1, rel_heights = c(1, .5))
+
+openapc  %>% filter(publisher %in% qpub4, period > 2012) %>% group_by(period) %>% summarize(n = n())
+openapc %>% filter(institution %in% uni_DE) %>% filter(publisher %in% qpub4, period > 2012) %>% group_by(period) %>% summarize(n = n())
+ugoe %>% filter(publisher %in% qpub4, period > 2012) %>% group_by(period) %>% summarize(n = n())
+
+```
+
+## Journals used by UGOE authors, not indexed by WoS/Scopus/DOAJ
+
+```{r}
+#journals_qpub_ugoe %>% datatable(filter = 'top')
+
+# subset of papers not indexed by WoS or Scimago / Scopus
+pqjs_ugoe <- ugoe_journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE)
+#length(unique(pqjs_ugoe$issn_l)) # number of journals
+
+## journals neither indexed by WoS, Scopus nor DOAJ - UGOE
+ugoe_journals %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE & doaj_idx == FALSE) %>% select(publisher, journal_full_title, issn_l) %>% unique() %>% datatable()
+#caption = 'Table 6: Journals neither indexed by WoS, Scopus or DOAJ - UGOE authorship'
+
+# subset of not indexed papers
+papers_not_idx <- ugoe %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE & doaj_idx == FALSE)
+                                
+                                
+```
+Overall, `r nrow(papers_not_idx)` journal articles have been published in `r length(unique(papers_not_idx$issn))` journals which were neither indexed by WoS, Scopus nor DOAJ. 
+
+## OpenAPC spendings on papers in journals which are neither indexed by WoS, Scopus or DOAJ - Germany only
+```{r}
+# subset of papers in journals which are neither indexed by WoS/Scimago/Scirus/DOAJ - DE only 
+openapc %>% filter(institution %in% uni_DE) %>% filter(WoS_idx == FALSE & Scimago_idx == FALSE & doaj_idx == FALSE) %>% select(publisher, euro) %>% group_by(publisher) %>% summarize(spend = sum(euro), n = n()) %>% arrange(desc(n)) %>% datatable(filter = 'top')
+#caption = 'Table 7: UGOE APC spendings by publisher (subset of potentially questionable publishers)'
+
+# with at least five publications, not at established publishing houses
+# TODO: check if questionable
+# Hikari, Ltd
+# Sciedu Press
+# Annex Publishers, LLC
+# Kernel Press UG (haftungsbeschrankt)
+# Sciaccess Publishers LLC
+
+ugoe_nodoi <- ugoe %>% filter(is.na(doi))
+n_nodoi <- nrow(ugoe_nodoi)
+
+```
+
+
+From the table above we consider the following journals as uncritical:
+
+* journals published by Elsevier, Springer Nature, SAGE, Hindawi, Informa (and others, tbc) 
+* Copernicus Discussion papers 
+* Akademiai Kiado Zrt., European Journal of Microbiology and Immunology - part of Wolters Kluwer, founded in 1828 by the Hungarian Academy of Sciences (HAS)
+
+Some journals may need further investigation, e.g.:
+
+* American Research Institute for Policy Development, INTERNATIONAL JOURNAL OF GENDER & WOMEN'S STUDIES - unclear, not a research institute, publishing seems to be the main activity 
+* Austin Publishing Group, Austin Journal of Clinical Neurology - unclear
+* Elmer Press, Inc., Journal of Medical Cases
+* International Cardiovascular Forum Journal, JCSM Clinical Reports
+* ISPUB, The Internet Journal of Pain, Symptom Control and Palliative Care
+* Research Institute for Progression of Knowledge, International journal of education and social science - misleading information on indexing 
+
+## Measuring impact and attention
+
+### Citation counts
+Citation counts are based on Crossref citation data, i.e. only available for publications with a DOI (`r nrow(ugoe) - n_nodoi` out of `r nrow(ugoe)` papers). The figures below show the distribution of citations to papers published in 2015, comparing those which are indexed by WoS resp. DOAJ or not. 
+
+```{r}
+# Crossref and Altmetric data for UGOE pubs
+# Adapted from N Jahn, https://gist.github.com/njahn82/a6ce300b00de5e218bbf3efb4e0a5e36
+# Add CrossRef citation count
+# some DOI malformed, not clear which ones
+#ugoe$cr_citation <- rcrossref::cr_citation_count(ugoe$doi)
+
+#' from Altmetrics
+library(rAltmetric)
+
+# run when updating altmetrics data
+#ugoe_alt <- purrr::map(ugoe$doi, purrr::safely(function(x) {
+#  rAltmetric::altmetrics(doi = x) %>%
+#  rAltmetric::altmetric_data()
+#}))
+#ugoe_alt_metr <- purrr::map_df(ugoe_alt, "result")
+
+# save output 
+#write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200410.csv")
+#write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200519.csv")
+#write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200525.csv")
+#write_csv(ugoe_alt_metr, "data_output/ugoe_altmetrics_20200702.csv")
+
+ugoe_altmetrics <- read_csv("data_output/ugoe_altmetrics_20200702.csv")
+
+#ugoe %>% ggplot(aes(x = period, y = cr_citation)) + geom_boxplot(aes(group = period)) + theme_minimal()
+
+# search for malformed DOIs 
+# set negate = TRUE to return non-matching elements
+# "^10.\\d{4,9}/[-._;()/:A-Z0-9]+$/i"
+# match starts with 10. followed by 4 to 9 digits/numbers followed by a forward dash, followed by sequence of letters and numbers which can be separated 
+#str_detect(string, pattern, negate = TRUE)
+
+# Multiple plot function
+# source: http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+
+# add citation information (takes some time)
+#ugoe$cr_citation <- rcrossref::cr_citation_count(ugoe$doi)$count
+# warning message about 8 malformed DOIs
+#write_csv(ugoe, "data_output/openapc_ugoe_20200410.csv")
+#write_csv(ugoe, "data_output/openapc_ugoe_20200519.csv")
+#write_csv(ugoe, "data_output/openapc_ugoe_20200525.csv")
+#write_csv(ugoe, "data_output/openapc_ugoe_20200702.csv")
+
+ugoe <- read_csv("data_output/openapc_ugoe_20200702.csv")
+
+# publications from 2015
+x <- ugoe %>% filter(period == 2015)
+
+p1 <- x %>% ggplot(aes(x = WoS_idx, y = cr_citation)) + geom_boxplot(outlier.shape = NA) + geom_jitter(alpha = 0.3, width = 0.25, height = 0) + ggtitle("Citations to publications in 2015 by indexing") + theme_minimal() + xlab("Indexed by WoS") + ylab("Citations")
+
+p2 <- x %>% ggplot(aes(x = doaj, y = cr_citation)) + geom_boxplot(outlier.shape = NA) + geom_jitter(alpha = 0.3, width = 0.25, height = 0) + theme_minimal()  + xlab("Indexed by DOAJ") + ylab("Citations") #+  ggtitle("Citations to publications in 2015 by indexing")
+
+multiplot(p1, p2, cols=2)
+
+
+#x %>% group_by(WoS_idx) %>% summarise(median = median(cr_citation, na.rm = TRUE), mean = mean(cr_citation, na.rm = TRUE), sd = sd(cr_citation, na.rm = TRUE), n = n())
+#x %>% group_by(doaj) %>% summarise(median = median(cr_citation, na.rm = TRUE), mean = mean(cr_citation, na.rm = TRUE), sd = sd(cr_citation, na.rm = TRUE), n = n())
+
+ugoe %>% group_by(period, WoS_idx) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = round(mean(cr_citation), 2), sd = round(sd(cr_citation), 2), n = n())
+
+ugoe %>% group_by(period, doaj) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = round(mean(cr_citation), 2), sd = round(sd(cr_citation), 2), n = n())
+
+## citations to papers - for PQJs based on the qpub subset
+ugoe$qpub <- ugoe$publisher %in% qpub
+ugoe <- ugoe %>% mutate(qpub = factor(qpub, levels = c(TRUE, FALSE)))
+
+ugoe %>% ggplot(aes(x = period, y = cr_citation, color = qpub)) + geom_boxplot(aes(group = period, color = qpub), outlier.shape = NA) + geom_jitter(alpha = 0.5, width = 0.25, height = 0) + theme_minimal() + coord_flip() + facet_grid(~ qpub) + scale_y_continuous(trans = 'log10') + labs(title = "Citations to UGOE papers", subtitle ="Subset of 13 questionable publishers (label TRUE)") + xlab("Year") + ylab("Citations")
+
+ugoe %>% group_by(period, qpub) %>% filter(!is.na(cr_citation)) %>% summarise(median = median(cr_citation), mean = round(mean(cr_citation), 2), sd = round(sd(cr_citation), 2), n = n())
+
+```
+
+### Alternative metrics
+The following figure shows Twitter mentions of papers which have received co-funding by UGOE's publication fund. It must be noted that the Altmetric database only collects information about social media mentions for publications with a DOI, e.g. citations/mentions on Twitter, citations by Wikipedia, etc. 
+
+```{r}
+# altmetrics
+xx <- ugoe_altmetrics %>% select(doi, cited_by_posts_count)
+ugoe_xx <- left_join(ugoe, ugoe_altmetrics, by = c("doi" = "doi"))
+
+ugoe_xx %>% ggplot(aes(x = period, y = cited_by_posts_count, color = WoS_idx)) + geom_boxplot(aes(group = period, color = WoS_idx), outlier.shape = NA) + geom_jitter(alpha = 0.5, width = 0.25, height = 0) + scale_y_continuous(trans = 'log10') + coord_flip() + theme_minimal() + ggtitle("Twitter mentions of UGOE papers by publication year") + xlab("Year") + ylab("Twitter posts") + labs(fill = "Indexed by WoS")
+
+```
+
+### 
+
+```{r}
+
+ugoe_xx %>% filter(cr_citation > 0 & cr_citation < 150) %>% 
+  ggplot(aes(cr_citation, cited_by_posts_count, color = WoS_idx)) + geom_point(alpha = 0.3) + scale_y_continuous(trans = 'log10')  + scale_x_continuous(trans = 'log10') + geom_smooth() + theme_minimal() + ggtitle("Citations vs. Twitter mentions for UGOE papers", subtitle = "One highly cited paper taken out for 2014") + xlab("Citations") + ylab("Twitter posts") + labs(fill = "Indexed by WoS") 
+
+# list of frequently tweeted pubs (> 100 twitter mentions)
+#ugoe_xx %>% filter(cited_by_posts_count > 100) %>% select(period, journal_full_title, doi)
+
+# list of frequently tweeted pubs (at least 50 twitter mentions)
+ugoe_xx %>% filter(cited_by_posts_count >= 50) %>% select(period, journal_full_title, doi, cr_citation, cited_by_posts_count, cited_by_wikipedia_count) %>% datatable()
+
+```
+
+For the figure above it must be taken into account that mentions on Twitter could only be found for `r nrow(ugoe) - sum(is.na(ugoe_xx$cited_by_posts_count))` out of `r nrow(ugoe)` publications. One highly cited paper was not taken into account for the regression based on citations vs. Twitter mentions (published in 2014, `r max(ugoe$cr_citation, na.rm = TRUE)` citations according to Crossref).
+
+The table shows publications which have been tweeted at least 50 times (original tweets and re-tweets).
+
+
+### 2020 data - not complete yet (some DOIs missing)
+```{r}
+ugoe2020 <- read_csv("data/ugoe_pubfonds_2020.csv")
+my_doi <- ugoe2020$doi
+
+# API timeout
+# ugoepub2020 <- rcrossref::cr_works(dois = my_doi) %>% pluck("data")
+
+# via license, not all records retrievable
+# 1: 404 (client error): /works/10.25849/myrmecol.news_030:175 - Resource not found. 
+# 2: 404 (client error): /works/10.3389/fneur.2021.561158 - Resource not found. 
+# 3: 404 (client error): /works/10.3389/fpsyt.2021.611346 - Resource not found. 
+# 4: 404 (client error): /works/10.3389/fimmu.2020.624547 - Resource not found. 
+# 5: 404 (client error): /works/10.3389/ffgc.2020.598759 - Resource not found. 
+# 6: 404 (client error): /works/10.3389/fgene.2021.622400 - Resource not found. 
+
+# 10.25849/myrmecol.news_030:175	Österreichische Gesellschaft für Entomofaunistik
+# 10.3389/fneur.2021.561158	Frontiers
+# 10.3389/fpsyt.2021.611346	Frontiers
+# 10.3389/fimmu.2020.624547	Frontiers
+# 10.3389/ffgc.2020.598759	Frontiers
+# 10.3389/fgene.2021.622400	Frontiers
+
+tt <- jsonlite::stream_in(file("data/ugoe_2020.json")) %>% tibble::as_tibble()
+
+```
